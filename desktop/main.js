@@ -22,7 +22,12 @@ const UI_PORT = Number(process.env.CUPNET_MINI_UI_PORT) || 8878;
 // Keep data out of the CLI's ~/.cupnet-mini so a desktop run and a CLI run don't
 // fight over the same CA / sessions; override with CUPNET_MINI_DIR if you want to share.
 const DATA_DIR = process.env.CUPNET_MINI_DIR || path.join(app.getPath('userData'), 'data');
-const UI_ORIGIN = `http://127.0.0.1:${UI_PORT}`;
+
+// Resolved at startup. The UI port is internal, so if it is busy we shift to a
+// free one; the proxy port is what the user points their browser at, so we never
+// move it silently — a busy proxy port is a clear, hard error instead.
+let uiPort = UI_PORT;
+let uiOrigin = `http://127.0.0.1:${uiPort}`;
 
 app.setName('CupNet mini');
 
@@ -43,11 +48,13 @@ function fail(message) {
 
 function startBackend() {
     fs.mkdirSync(DATA_DIR, { recursive: true });
+    // Drop any stale token so waitForUi only ever sees this run's token.
+    try { fs.unlinkSync(path.join(DATA_DIR, 'ui-token')); } catch { /* none */ }
     backend = spawn(process.execPath, [
         ENTRY, 'start',
         '--data', DATA_DIR,
         '--port', String(PROXY_PORT),
-        '--ui-port', String(UI_PORT),
+        '--ui-port', String(uiPort),
     ], {
         cwd: APP_ROOT,
         env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
@@ -76,14 +83,47 @@ function portOpen(port) {
     });
 }
 
+// True if we can bind the port on loopback right now (i.e. it is free).
+function portFree(port) {
+    return new Promise((resolve) => {
+        const srv = net.createServer();
+        srv.once('error', () => resolve(false));
+        srv.listen(port, '127.0.0.1', () => srv.close(() => resolve(true)));
+    });
+}
+
+// Ask the OS for a free ephemeral port on loopback.
+function pickFreePort() {
+    return new Promise((resolve, reject) => {
+        const srv = net.createServer();
+        srv.once('error', reject);
+        srv.listen(0, '127.0.0.1', () => {
+            const p = srv.address().port;
+            srv.close(() => resolve(p));
+        });
+    });
+}
+
+async function resolvePorts() {
+    if (!(await portFree(PROXY_PORT))) {
+        throw new Error(
+            `the proxy port ${PROXY_PORT} is already in use — another CupNet instance may be running. ` +
+            `Quit it, or set CUPNET_MINI_PROXY_PORT to a free port and relaunch.`);
+    }
+    if (!(await portFree(UI_PORT))) {
+        uiPort = await pickFreePort();
+        uiOrigin = `http://127.0.0.1:${uiPort}`;
+    }
+}
+
 async function waitForUi(timeoutMs = 25000) {
     const tokenFile = path.join(DATA_DIR, 'ui-token');
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
         if (!backend) throw new Error('backend exited before the UI was ready');
-        if (fs.existsSync(tokenFile) && (await portOpen(UI_PORT))) {
+        if (fs.existsSync(tokenFile) && (await portOpen(uiPort))) {
             const token = fs.readFileSync(tokenFile, 'utf8').trim();
-            if (token) return `${UI_ORIGIN}/#t=${token}`;
+            if (token) return `${uiOrigin}/#t=${token}`;
         }
         await new Promise((r) => setTimeout(r, 250));
     }
@@ -107,7 +147,7 @@ function createWindow(url) {
     // Same-origin pop-ups (viewer / inspector windows) open as child app windows;
     // anything else is a real external link and goes to the system browser.
     win.webContents.setWindowOpenHandler(({ url: target }) => {
-        if (target.startsWith(`${UI_ORIGIN}/`)) {
+        if (target.startsWith(`${uiOrigin}/`)) {
             return {
                 action: 'allow',
                 overrideBrowserWindowOptions: {
@@ -133,6 +173,12 @@ if (!app.requestSingleInstanceLock()) {
     });
 
     app.whenReady().then(async () => {
+        try {
+            await resolvePorts();
+        } catch (e) {
+            fail(`Could not start CupNet mini: ${e.message}`);
+            return;
+        }
         startBackend();
         try {
             const url = await waitForUi();

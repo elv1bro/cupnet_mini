@@ -1,7 +1,7 @@
 {
   "name": "cupnet-mini",
   "productName": "CupNet mini",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "CupNet mini — a standalone MITM proxy + AzureTLS (real Google Chrome fingerprint) worker with a local control UI, wrapped as a desktop app. No Electron in the core; the proxy and worker are plain Node + Go.",
   "license": "ISC",
   "private": true,
