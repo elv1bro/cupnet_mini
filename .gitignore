@@ -1,0 +1,6 @@
+node_modules/
+dist/
+# Prebuilt Go workers are generated (npm run build:go / CI); only the README is tracked.
+azuretls-go/bin/azuretls-worker-*
+*.log
+.DS_Store

@@ -1,0 +1,96 @@
+{
+  "name": "cupnet-mini",
+  "productName": "CupNet mini",
+  "version": "1.0.0",
+  "description": "CupNet mini — a standalone MITM proxy + AzureTLS (real Google Chrome fingerprint) worker with a local control UI, wrapped as a desktop app. No Electron in the core; the proxy and worker are plain Node + Go.",
+  "license": "ISC",
+  "private": true,
+  "main": "desktop/main.js",
+  "scripts": {
+    "start": "electron .",
+    "build:go": "bash azuretls-go/build.sh",
+    "dist": "electron-builder",
+    "dist:mac": "electron-builder --mac",
+    "dist:linux": "electron-builder --linux",
+    "dist:win": "electron-builder --win"
+  },
+  "devDependencies": {
+    "electron": "^45.2.3",
+    "electron-builder": "^26.18.0"
+  },
+  "build": {
+    "appId": "dev.cupnet.mini",
+    "productName": "CupNet mini",
+    "asar": false,
+    "afterPack": "desktop/after-pack.js",
+    "directories": {
+      "output": "dist",
+      "buildResources": "icons"
+    },
+    "files": [
+      "desktop/**",
+      "mini/**",
+      "main-process/**",
+      "azuretls-go/bin/**",
+      "icons/icon.*",
+      "*.js",
+      "package.json"
+    ],
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "icon": "icons/icon.icns",
+      "category": "public.app-category.developer-tools",
+      "identity": null
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "tar.gz",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "icons/icon.png",
+      "category": "Network"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "icons/icon.ico"
+    }
+  }
+}
